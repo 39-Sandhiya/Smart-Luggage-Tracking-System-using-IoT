@@ -1,1 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Smart Luggage Tracker - GCE Salem</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
 
+        body {
+            background: #0a0e1a;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-wrapper {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 320px;
+            background: linear-gradient(135deg, #0f1724 0%, #0a0e1a 100%);
+            color: #e0e0e0;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            border-right: 1px solid #2a3a5a;
+            box-shadow: 4px 0 20px rgba(0,0,0,0.3);
+            overflow-y: auto;
+            z-index: 10;
+        }
+
+        .sidebar h2 {
+            font-size: 1.3rem;
+            text-align: center;
+            padding-bottom: 0.8rem;
+            border-bottom: 2px solid #2a5f8a;
+            color: #6ab0ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        /* Status Cards */
+        .status-card {
+            background: #0f1724;
+            padding: 1rem;
+            border-radius: 16px;
+            border: 1px solid #2a3a5a;
+            transition: all 0.3s ease;
+        }
+
+        .status-card label {
+            display: block;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #8aa0c0;
+            margin-bottom: 0.8rem;
+        }
+
+        .status-card button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .status-card button:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.05);
+        }
+
+        .power-on {
+            background: #00c853;
+            color: white;
+            box-shadow: 0 2px 8px rgba(0, 200, 83, 0.3);
+        }
+
+        .power-off {
+            background: #d32f2f;
+            color: white;
+            box-shadow: 0 2px 8px rgba(211, 47, 47, 0.3);
+        }
+
+        #mode-toggle {
+            background: #1e3a5f;
+            color: white;
+            margin-bottom: 8px;
+        }
+
+        #mode-toggle.rack-mode {
+            background: #5a3a1e;
+        }
+
+        .mode-hint {
+            font-size: 0.7rem;
+            color: #6a8ab0;
+            display: block;
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        /* Sensor Status */
+        .sensor-status {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .sensor-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: #0a0e1a;
+            border-radius: 10px;
+            border-left: 3px solid;
+        }
+
+        .sensor-item i {
+            font-size: 1.2rem;
+        }
+
+        .sensor-name {
+            font-weight: 500;
+            flex: 1;
+            margin-left: 10px;
+        }
+
+        .sensor-value {
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .sensor-badge {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: 8px;
+        }
+
+        .badge-safe { background: #00c853; box-shadow: 0 0 5px #00c853; }
+        .badge-warning { background: #ff4444; box-shadow: 0 0 5px #ff4444; }
+
+        /* Alert History */
+        .alert-history h3 {
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+            color: #ffaa66;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .alert-history ul {
+            list-style: none;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .alert-history li {
+            background: #0f1724;
+            margin: 8px 0;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            border-left: 3px solid #ff5555;
+            word-wrap: break-word;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #status-bar {
+            padding: 14px 20px;
+            font-weight: bold;
+            text-align: center;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .status-safe {
+            background: #0f3b2c;
+            color: #8affc2;
+            border-bottom: 2px solid #2a8a5a;
+        }
+
+        .status-alert {
+            background: #5a1e1e;
+            color: #ffaaaa;
+            border-bottom: 2px solid #ff4444;
+            animation: pulse 1s infinite;
+        }
+
+        .status-offline {
+            background: #2a2a2a;
+            color: #888;
+            border-bottom: 2px solid #555;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; background: #5a1e1e; }
+            50% { opacity: 0.9; background: #7a2a2a; }
+        }
+
+        #map {
+            flex: 1;
+            width: 100%;
+            z-index: 1;
+        }
+
+        /* Scrollbar */
+        .alert-history ul::-webkit-scrollbar {
+            width: 6px;
+        }
+        .alert-history ul::-webkit-scrollbar-track {
+            background: #0f1724;
+        }
+        .alert-history ul::-webkit-scrollbar-thumb {
+            background: #2a5f8a;
+            border-radius: 3px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 280px;
+                padding: 1rem;
+            }
+            .app-wrapper {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-wrapper">
+        <aside class="sidebar">
+            <h2><i class="fas fa-suitcase-rolling"></i> Smart Luggage Pro</h2>
+            
+            <div class="status-card">
+                <label><i class="fas fa-power-off"></i> System Control</label>
+                <button id="power-toggle" class="power-on">🟢 SYSTEM ON</button>
+            </div>
+
+            <div class="status-card">
+                <label><i class="fas fa-sliders-h"></i> Operating Mode</label>
+                <button id="mode-toggle">👤 Wearable Mode</button>
+                <small class="mode-hint" id="mode-hint">Wearable: Reed + LDR only | Rack: All sensors</small>
+            </div>
+
+            <div class="status-card">
+                <label><i class="fas fa-microchip"></i> Sensor Status</label>
+                <div class="sensor-status">
+                    <div class="sensor-item" id="reed-status">
+                        <i class="fas fa-lock"></i>
+                        <span class="sensor-name">Reed Switch (Zip)</span>
+                        <span class="sensor-value">Closed</span>
+                        <span class="sensor-badge badge-safe"></span>
+                    </div>
+                    <div class="sensor-item" id="ldr-status">
+                        <i class="fas fa-sun"></i>
+                        <span class="sensor-name">LDR (Light)</span>
+                        <span class="sensor-value">Normal</span>
+                        <span class="sensor-badge badge-safe"></span>
+                    </div>
+                    <div class="sensor-item" id="motion-status">
+                        <i class="fas fa-waveform"></i>
+                        <span class="sensor-name">MPU6050 (Motion)</span>
+                        <span class="sensor-value">Idle</span>
+                        <span class="sensor-badge badge-safe"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert-history">
+                <h3><i class="fas fa-bell"></i> Live Alerts</h3>
+                <ul id="alert-list">
+                    <li style="color: #666; text-align: center;">No alerts yet</li>
+                </ul>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div id="status-bar" class="status-safe">
+                <i class="fas fa-shield-alt"></i>
+                <span id="status-text">🟢 SYSTEM ACTIVE - MONITORING</span>
+            </div>
+            <div id="map"></div>
+        </main>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // ==================== FIREBASE CONFIGURATION ====================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDEa0Yi8Bm5D1rJqqcAn5GhsjqOmDyQzOo",
+            authDomain: "smartluggage-6f902.firebaseapp.com",
+            databaseURL: "https://smartluggage-6f902-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "smartluggage-6f902",
+            storageBucket: "smartluggage-6f902.firebasestorage.app",
+            messagingSenderId: "247186740817",
+            appId: "1:247186740817:web:8b33628d8ef5fbb8f54a70"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // ==================== GLOBAL VARIABLES ====================
+        let map, marker, polyline, route = [];
+        let lastAlertTimestamp = {};
+        let lastSensorData = {
+            reed: false,
+            ldr: false,
+            motion: false,
+            lightValue: 0
+        };
+
+        // ==================== MAP INITIALIZATION ====================
+        function initMap() {
+            map = L.map('map').setView([11.6643, 78.1460], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+            
+            // Custom luggage icon
+            const luggageIcon = L.divIcon({
+                html: '<i class="fas fa-suitcase" style="font-size: 24px; color: #3498db; text-shadow: 0 0 5px rgba(0,0,0,0.5);"></i>',
+                iconSize: [24, 24],
+                className: 'luggage-marker'
+            });
+            
+            marker = L.marker([11.6643, 78.1460], { icon: luggageIcon }).addTo(map);
+            polyline = L.polyline([], { color: '#3498db', weight: 3, opacity: 0.7 }).addTo(map);
+        }
+
+        // ==================== ADD ALERT TO HISTORY ====================
+        function addToAlertHistory(message, type = 'alert') {
+            const alertList = document.getElementById('alert-list');
+            const timestamp = new Date();
+            const timeStr = timestamp.toLocaleTimeString();
+            const dateStr = timestamp.toLocaleDateString();
+            const alertId = Date.now();
+            
+            // Remove placeholder if exists
+            if (alertList.children.length === 1 && alertList.children[0].innerText === "No alerts yet") {
+                alertList.innerHTML = '';
+            }
+            
+            const li = document.createElement('li');
+            li.id = `alert-${alertId}`;
+            li.style.animation = 'slideIn 0.3s ease';
+            li.innerHTML = `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <strong>${timeStr}</strong>
+                    <small style="color: #888;">${dateStr}</small>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <i class="fas ${type === 'alert' ? 'fa-exclamation-triangle' : 'fa-info-circle'}" style="color: ${type === 'alert' ? '#ff5555' : '#55ff55'}"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            alertList.insertBefore(li, alertList.firstChild);
+            
+            // Keep only last 20 alerts
+            while (alertList.children.length > 20) {
+                alertList.removeChild(alertList.lastChild);
+            }
+            
+            // Auto-fade after 1 minute
+            setTimeout(() => {
+                const element = document.getElementById(`alert-${alertId}`);
+                if (element) element.style.opacity = '0.6';
+            }, 60000);
+        }
+
+        // ==================== UPDATE SENSOR UI ====================
+        function updateSensorUI(sensorData) {
+            // Reed Switch
+            const reedDiv = document.getElementById('reed-status');
+            const reedValue = sensorData.reed || false;
+            reedDiv.querySelector('.sensor-value').innerHTML = reedValue ? '<span style="color: #ff4444;">OPEN</span>' : '<span style="color: #00c853;">CLOSED</span>';
+            reedDiv.querySelector('.sensor-badge').className = `sensor-badge ${reedValue ? 'badge-warning' : 'badge-safe'}`;
+            reedDiv.style.borderLeftColor = reedValue ? '#ff4444' : '#00c853';
+            
+            // LDR
+            const ldrDiv = document.getElementById('ldr-status');
+            const ldrValue = sensorData.ldr || false;
+            const lightReading = sensorData.lightValue || 0;
+            ldrDiv.querySelector('.sensor-value').innerHTML = ldrValue ? 
+                `<span style="color: #ff4444;">LIGHT DETECTED (${lightReading})</span>` : 
+                `<span style="color: #00c853;">Normal (${lightReading})</span>`;
+            ldrDiv.querySelector('.sensor-badge').className = `sensor-badge ${ldrValue ? 'badge-warning' : 'badge-safe'}`;
+            ldrDiv.style.borderLeftColor = ldrValue ? '#ff4444' : '#00c853';
+            
+            // Motion
+            const motionDiv = document.getElementById('motion-status');
+            const motionValue = sensorData.motion || false;
+            motionDiv.querySelector('.sensor-value').innerHTML = motionValue ? 
+                '<span style="color: #ff4444;">MOTION DETECTED</span>' : 
+                '<span style="color: #00c853;">Idle</span>';
+            motionDiv.querySelector('.sensor-badge').className = `sensor-badge ${motionValue ? 'badge-warning' : 'badge-safe'}`;
+            motionDiv.style.borderLeftColor = motionValue ? '#ff4444' : '#00c853';
+        }
+
+        // ==================== FIREBASE LISTENERS ====================
+        const luggageRef = database.ref('luggage_data');
+        
+        // Listen for system state changes
+        luggageRef.on('value', function(snapshot) {
+            const data = snapshot.val();
+            if (!data) return;
+            
+            console.log("Firebase Data:", data);
+            
+            // Update map location
+            if (map && marker && data.lat && data.lng) {
+                const pos = [data.lat, data.lng];
+                route.push(pos);
+                if (route.length > 100) route.shift();
+                marker.setLatLng(pos);
+                polyline.setLatLngs(route);
+                map.setView(pos, 15);
+            }
+            
+            // Update Power Button UI
+            const isPowerOn = data.power === true;
+            const powerBtn = document.getElementById('power-toggle');
+            if (isPowerOn) {
+                powerBtn.innerText = '🟢 SYSTEM ON';
+                powerBtn.className = 'power-on';
+            } else {
+                powerBtn.innerText = '🔴 SYSTEM OFF';
+                powerBtn.className = 'power-off';
+            }
+            
+            // Update Mode UI
+            const mode = data.mode || "Wearable";
+            const modeBtn = document.getElementById('mode-toggle');
+            if (mode === "Rack") {
+                modeBtn.innerText = '📦 Rack Mode';
+                modeBtn.classList.add('rack-mode');
+                document.getElementById('mode-hint').innerHTML = '📦 Rack: All sensors active (Reed + LDR + Motion)';
+            } else {
+                modeBtn.innerText = '👤 Wearable Mode';
+                modeBtn.classList.remove('rack-mode');
+                document.getElementById('mode-hint').innerHTML = '👤 Wearable: Reed + LDR sensors only | Motion sensor OFF';
+            }
+            
+            // Update Sensor Data
+            const sensorData = {
+                reed: data.reedTriggered || false,
+                ldr: data.ldrTriggered || false,
+                motion: data.motionTriggered || false,
+                lightValue: data.ldrValue || 0
+            };
+            updateSensorUI(sensorData);
+            
+            // Handle Alerts
+            const isAlert = data.isAlert === true;
+            const alertReason = data.alertReason || "";
+            const statusBar = document.getElementById('status-bar');
+            const statusText = document.getElementById('status-text');
+            
+            if (!isPowerOn) {
+                statusBar.className = 'status-offline';
+                statusText.innerHTML = '<i class="fas fa-power-off"></i> SYSTEM OFFLINE - NOT MONITORING';
+            } 
+            else if (isPowerOn && isAlert && alertReason) {
+                statusBar.className = 'status-alert';
+                statusText.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ALERT: ${alertReason}`;
+                
+                // Add to history with deduplication
+                const alertKey = `${alertReason}_${Math.floor(Date.now() / 10000)}`;
+                if (!lastAlertTimestamp[alertKey]) {
+                    lastAlertTimestamp[alertKey] = Date.now();
+                    addToAlertHistory(alertReason, 'alert');
+                    
+                    // Play sound if supported
+                    try {
+                        const audio = new Audio('data:audio/wav;base64,U3RlYWx0aCBTb3VuZA==');
+                        audio.play().catch(e => console.log('Audio not supported'));
+                    } catch(e) {}
+                }
+            } 
+            else if (isPowerOn && !isAlert) {
+                statusBar.className = 'status-safe';
+                statusText.innerHTML = '<i class="fas fa-shield-alt"></i> SYSTEM ACTIVE - ALL SECURE';
+            }
+            
+            // Clean old alert timestamps
+            const now = Date.now();
+            Object.keys(lastAlertTimestamp).forEach(key => {
+                if (now - lastAlertTimestamp[key] > 30000) {
+                    delete lastAlertTimestamp[key];
+                }
+            });
+        });
+        
+        // Listen specifically for alert updates
+        database.ref('luggage_data/alerts').on('child_added', function(snapshot) {
+            const alert = snapshot.val();
+            if (alert && alert.message) {
+                addToAlertHistory(alert.message, 'alert');
+            }
+        });
+
+        // ==================== POWER TOGGLE ====================
+        document.getElementById('power-toggle').addEventListener('click', function() {
+            luggageRef.once('value', function(snapshot) {
+                const data = snapshot.val();
+                if (data) {
+                    const newPowerState = !data.power;
+                    luggageRef.update({ 
+                        power: newPowerState,
+                        lastUpdated: firebase.database.ServerValue.TIMESTAMP
+                    }).then(() => {
+                        addToAlertHistory(`System ${newPowerState ? 'Turned ON' : 'Turned OFF'} via App`, 'info');
+                        console.log(`Power toggled to: ${newPowerState ? 'ON' : 'OFF'}`);
+                    }).catch(error => {
+                        console.error("Error toggling power:", error);
+                        addToAlertHistory(`Failed to toggle system: ${error.message}`, 'alert');
+                    });
+                }
+            });
+        });
+
+        // ==================== MODE TOGGLE ====================
+        document.getElementById('mode-toggle').addEventListener('click', function() {
+            luggageRef.once('value', function(snapshot) {
+                const data = snapshot.val();
+                if (data) {
+                    const newMode = (data.mode === "Wearable") ? "Rack" : "Wearable";
+                    luggageRef.update({ 
+                        mode: newMode,
+                        lastUpdated: firebase.database.ServerValue.TIMESTAMP
+                    }).then(() => {
+                        addToAlertHistory(`Mode changed to ${newMode} Mode`, 'info');
+                        console.log(`Mode changed to: ${newMode}`);
+                    }).catch(error => {
+                        console.error("Error changing mode:", error);
+                    });
+                }
+            });
+        });
+
+        // ==================== INITIALIZE ====================
+        window.addEventListener('load', function() {
+            initMap();
+            
+            // Initialize Firebase data structure if empty
+            luggageRef.once('value', function(snapshot) {
+                if (!snapshot.exists()) {
+                    luggageRef.set({
+                        lat: 11.6643,
+                        lng: 78.1460,
+                        isAlert: false,
+                        alertReason: "",
+                        power: true,
+                        mode: "Wearable",
+                        reedTriggered: false,
+                        ldrTriggered: false,
+                        motionTriggered: false,
+                        ldrValue: 0,
+                        lastUpdated: firebase.database.ServerValue.TIMESTAMP,
+                        alerts: {}
+                    });
+                }
+            });
+            
+            addToAlertHistory("Smart Luggage System Started", "info");
+            console.log("✅ Web App Ready - Monitoring Firebase...");
+        });
+        
+        // Add CSS animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: translateX(-20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateX(0);
+                }
+            }
+            .luggage-marker {
+                background: transparent;
+                border: none;
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
